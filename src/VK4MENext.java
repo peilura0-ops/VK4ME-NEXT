@@ -1,69 +1,165 @@
 import javax.microedition.midlet.*;
 import javax.microedition.lcdui.*;
+import javax.microedition.io.*;
+import java.io.*;
 
 public class VK4MENext extends MIDlet
         implements CommandListener {
 
     private Display display;
-    private List menu;
-    private Form page;
+    private Form loginForm;
+    private TextField tokenField;
+    private TextBox resultBox;
 
-    private Command back;
-    private Command exit;
+    private Command connectCommand;
+    private Command backCommand;
+    private Command exitCommand;
 
-    private String[] sections = {
-        "Лента новостей",
-        "Сообщения",
-        "Фотографии",
-        "Мой профиль",
-        "Друзья",
-        "Музыка"
-    };
+    private static final String API =
+        "https://api.vk.com/method/newsfeed.get";
 
     public void startApp() {
         display = Display.getDisplay(this);
 
-        menu = new List("VK4ME NEXT", List.IMPLICIT);
+        loginForm = new Form("VK4ME NEXT");
 
-        for (int i = 0; i < sections.length; i++) {
-            menu.append(sections[i], null);
-        }
-
-        exit = new Command("Выход", Command.EXIT, 1);
-        menu.addCommand(exit);
-        menu.setCommandListener(this);
-
-        display.setCurrent(menu);
-    }
-
-    private void openPage(int index) {
-        page = new Form(sections[index]);
-
-        page.append(new StringItem(
+        loginForm.append(new StringItem(
             null,
-            "VK4ME NEXT Classic\n\n" +
-            sections[index] +
-            "\n\nРаздел готовится."
+            "Подключение к VK\n\nВведите пользовательский токен:"
         ));
 
-        back = new Command("Назад", Command.BACK, 1);
-        page.addCommand(back);
-        page.setCommandListener(this);
+        tokenField = new TextField(
+            "VK token:", "", 500, TextField.ANY
+        );
 
-        display.setCurrent(page);
+        loginForm.append(tokenField);
+
+        connectCommand = new Command(
+            "Загрузить ленту", Command.OK, 1
+        );
+
+        exitCommand = new Command(
+            "Выход", Command.EXIT, 2
+        );
+
+        loginForm.addCommand(connectCommand);
+        loginForm.addCommand(exitCommand);
+        loginForm.setCommandListener(this);
+
+        display.setCurrent(loginForm);
     }
 
     public void commandAction(
         Command command, Displayable screen) {
 
-        if (command == exit) {
+        if (command == exitCommand) {
             destroyApp(true);
             notifyDestroyed();
-        } else if (command == back) {
-            display.setCurrent(menu);
-        } else if (screen == menu &&
-                   command == List.SELECT_COMMAND) {
-            openPage(menu.getSelectedIndex());
+        }
+
+        if (command == connectCommand) {
+            String token = tokenField.getString().trim();
+
+            if (token.length() == 0) {
+                showResult("Введите токен VK.");
+                return;
+            }
+
+            showResult("Подключение к VK...");
+            new Thread(new Loader(token)).start();
+        }
+
+        if (command == backCommand) {
+            display.setCurrent(loginForm);
+        }
+    }
+
+    private void showResult(String message) {
+        resultBox = new TextBox(
+            "VK4ME NEXT",
+            message,
+            4000,
+            TextField.ANY
+        );
+
+        backCommand = new Command(
+            "Назад", Command.BACK, 1
+        );
+
+        resultBox.addCommand(backCommand);
+        resultBox.setCommandListener(this);
+
+        display.setCurrent(resultBox);
+    }
+
+    private class Loader implements Runnable {
+        private String token;
+
+        Loader(String value) {
+            token = value;
+        }
+
+        public void run() {
+            HttpConnection connection = null;
+            InputStream input = null;
+
+            try {
+                String url = API
+                    + "?filters=post"
+                    + "&count=10"
+                    + "&access_token=" + token
+                    + "&v=5.199";
+
+                connection = (HttpConnection)
+                    Connector.open(url);
+
+                connection.setRequestMethod(
+                    HttpConnection.GET
+                );
+
+                connection.setRequestProperty(
+                    "User-Agent", "VK4ME-NEXT"
+                );
+
+                int status =
+                    connection.getResponseCode();
+
+                input = connection.openInputStream();
+
+                ByteArrayOutputStream output =
+                    new ByteArrayOutputStream();
+
+                int data;
+
+                while ((data = input.read()) != -1) {
+                    output.write(data);
+
+                    if (output.size() >= 3500) {
+                        break;
+                    }
+                }
+
+                String response =
+                    new String(output.toByteArray(), "UTF-8");
+
+                showResult(
+                    "HTTP: " + status + "\n\n" + response
+                );
+
+            } catch (Exception e) {
+                showResult(
+                    "Ошибка подключения:\n" +
+                    e.toString()
+                );
+
+            } finally {
+                try {
+                    if (input != null) input.close();
+                    if (connection != null)
+                        connection.close();
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
