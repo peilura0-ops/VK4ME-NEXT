@@ -307,105 +307,62 @@ public class VK4MENext extends MIDlet
         worker.start();
     }
 
-    private String formatNews(String json) {
-        StringBuffer result = new StringBuffer();
+    
+private String formatNews(String json) {
+    StringBuffer result = new StringBuffer();
+    result.append("НОВОСТИ VK\n\n");
 
-        result.append("НОВОСТИ VK\n\n");
+    try {
+        java.util.Hashtable root =
+            VKJson.asObject(VKJson.parse(json));
 
-        int position = 0;
-        int number = 0;
+        java.util.Hashtable response =
+            VKJson.getObject(root, "response");
 
-        while (position < json.length()
-                && number < 10) {
+        java.util.Vector items =
+            VKJson.getArray(response, "items");
 
-            int key = json.indexOf(
-                "\"text\"", position);
+        int shown = 0;
 
-            if (key < 0) break;
+        for (int i = 0; i < items.size(); i++) {
+            java.util.Hashtable item =
+                VKJson.asObject(items.elementAt(i));
 
-            int colon = json.indexOf(
-                ':', key + 6);
+            java.util.Hashtable post =
+                VKJson.getObject(item, "post");
 
-            if (colon < 0) break;
+            String text =
+                VKJson.getString(post, "text");
 
-            int quote = json.indexOf(
-                '"', colon + 1);
-
-            if (quote < 0) break;
-
-            StringBuffer post = new StringBuffer();
-
-            int i = quote + 1;
-            boolean closed = false;
-
-            while (i < json.length()) {
-                char ch = json.charAt(i++);
-
-                if (ch == '"') {
-                    closed = true;
-                    break;
-                }
-
-                if (ch == '\\' && i < json.length()) {
-                    char next = json.charAt(i++);
-
-                    if (next == 'n') {
-                        post.append('\n');
-
-                    } else if (
-                        next == 'r' || next == 't') {
-                        post.append(' ');
-
-                    } else if (
-                        next == 'u'
-                        && i + 4 <= json.length()) {
-
-                        try {
-                            int code =
-                                Integer.parseInt(
-                                    json.substring(i, i + 4),
-                                    16);
-
-                            post.append((char) code);
-                            i += 4;
-
-                        } catch (Exception e) {
-                            post.append('?');
-                        }
-
-                    } else {
-                        post.append(next);
-                    }
-
-                } else {
-                    post.append(ch);
-                }
+            if (text.length() == 0) {
+                text = VKJson.getString(item, "text");
             }
 
-            position = i;
+            if (text.length() > 0) {
+                shown++;
 
-            String text = post.toString().trim();
-
-            if (closed && text.length() > 0) {
-                number++;
-
-                result.append("Пост ");
-                result.append(number);
-                result.append("\n");
+                result.append("ПУБЛИКАЦИЯ ");
+                result.append(shown);
+                result.append("\n\n");
                 result.append(text);
                 result.append("\n\n");
                 result.append("----------------\n\n");
             }
         }
 
-        if (number == 0) {
+        if (shown == 0) {
             result.append(
-                "Текстовых записей не найдено.\n\n");
-            result.append(json);
+                "В ленте пока нет текстовых публикаций.");
         }
 
-        return result.toString();
+    } catch (Exception e) {
+        result.append("Не удалось обработать ленту VK.\n");
+        result.append(e.toString());
     }
+
+    return result.toString();
+}
+
 
     private void showMusic() {
         musicForm = new Form("VK4ME - Музыка");
