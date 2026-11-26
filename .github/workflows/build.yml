@@ -1,0 +1,69 @@
+name: Build VK4ME NEXT
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get source
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download J2ME tools
+        run: |
+          mkdir -p tools/lib tools/proguard
+          curl -fL https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.38.0/ecj-3.38.0.jar -o tools/ecj.jar
+          curl -fL https://repo1.maven.org/maven2/org/microemu/cldcapi11/2.0.4/cldcapi11-2.0.4.jar -o tools/lib/cldcapi11.jar
+          curl -fL https://repo1.maven.org/maven2/org/microemu/midpapi20/2.0.4/midpapi20-2.0.4.jar -o tools/lib/midpapi20.jar
+          curl -fL https://github.com/Guardsquare/proguard/releases/download/v7.8.2/proguard-7.8.2.zip -o tools/proguard.zip
+          unzip -q tools/proguard.zip -d tools/proguard
+
+      - name: Compile MIDlet
+        run: |
+          mkdir -p build/classes
+          java -jar tools/ecj.jar -nowarn \
+            -source 1.3 -target 1.1 \
+            -bootclasspath tools/lib/cldcapi11.jar:tools/lib/midpapi20.jar \
+            -classpath tools/lib/cldcapi11.jar:tools/lib/midpapi20.jar \
+            -d build/classes src/*.java
+
+      - name: Preverify MIDlet
+        run: |
+          jar cf build/raw.jar -C build/classes .
+          bash tools/proguard/proguard-7.8.2/bin/proguard.sh \
+            -injars build/raw.jar \
+            -outjars build/preverified.jar \
+            -libraryjars tools/lib/cldcapi11.jar \
+            -libraryjars tools/lib/midpapi20.jar \
+            -microedition \
+            -dontshrink \
+            -dontoptimize \
+            -dontobfuscate \
+            -dontwarn \
+            -keep 'public class * extends javax.microedition.midlet.MIDlet { public *; }'
+
+      - name: Package JAR and JAD
+        run: |
+          mkdir -p dist
+          cp build/preverified.jar dist/VK4MENext.jar
+          jar ufm dist/VK4MENext.jar MANIFEST.MF
+          SIZE=$(wc -c < dist/VK4MENext.jar | tr -d ' ')
+          sed -i '/^MIDlet-Jar-Size:/d; /^MIDlet-Jar-URL:/d' VK4MENext.jad
+          printf '\nMIDlet-Jar-Size: %s\nMIDlet-Jar-URL: VK4MENext.jar\n' "$SIZE" >> VK4MENext.jad
+          cp VK4MENext.jad dist/
+
+      - name: Upload JAR and JAD
+        uses: actions/upload-artifact@v4
+        with:
+          name: VK4ME-NEXT
+          path: dist/
