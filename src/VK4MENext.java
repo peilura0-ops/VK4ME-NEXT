@@ -24,6 +24,7 @@ public class VK4MENext extends MIDlet
     private Command saveCommand;
     private Command exitCommand;
     private Command backCommand;
+    private Command openCommand;
     private Command playStreamCommand;
     private Command playLocalCommand;
     private Command stopCommand;
@@ -41,7 +42,7 @@ public class VK4MENext extends MIDlet
         "Новости",
         "Сообщения",
         "Друзья",
-        "Профиль",
+        "Мой профиль",
         "Фотографии",
         "Музыка",
         "Настройки / токен",
@@ -53,6 +54,9 @@ public class VK4MENext extends MIDlet
 
         exitCommand = new Command(
             "Выход", Command.EXIT, 2);
+
+        openCommand = new Command(
+            "Открыть", Command.OK, 1);
 
         token = loadToken();
 
@@ -67,17 +71,25 @@ public class VK4MENext extends MIDlet
     private void showLogin() {
         loginForm = new Form("VK4ME NEXT");
 
-        loginForm.append("VK4ME NEXT Classic 0.3\n\n");
         loginForm.append(
-            "Введи пользовательский токен VK.\n");
+            "VK4ME NEXT\n" +
+            "Клиент VK для Nokia S60\n\n");
+
+        loginForm.append(
+            "Вставь пользовательский токен VK.\n\n");
 
         tokenField = new TextField(
-            "Токен:", token, 1000, TextField.ANY);
+            "Токен:",
+            token,
+            1000,
+            TextField.ANY);
 
         loginForm.append(tokenField);
 
         saveCommand = new Command(
-            "Сохранить", Command.OK, 1);
+            "Сохранить и войти",
+            Command.OK,
+            1);
 
         loginForm.addCommand(saveCommand);
         loginForm.addCommand(exitCommand);
@@ -88,15 +100,14 @@ public class VK4MENext extends MIDlet
 
     private void showMenu() {
         menu = new List(
-            "VK4ME NEXT", Choice.IMPLICIT);
+            "VK4ME NEXT",
+            Choice.IMPLICIT);
 
         for (int i = 0; i < ITEMS.length; i++) {
             menu.append(ITEMS[i], null);
         }
 
-        menu.setSelectCommand(
-            new Command("Открыть", Command.OK, 1));
-
+        menu.setSelectCommand(openCommand);
         menu.addCommand(exitCommand);
         menu.setCommandListener(this);
 
@@ -104,7 +115,7 @@ public class VK4MENext extends MIDlet
     }
 
     public void commandAction(
-        Command c, Displayable s) {
+            Command c, Displayable s) {
 
         if (c == exitCommand) {
             destroyApp(true);
@@ -117,34 +128,50 @@ public class VK4MENext extends MIDlet
                 tokenField.getString().trim();
 
             if (entered.length() == 0) {
-                showMessage("Введи токен VK");
+                showMessage("Введи токен VK.");
                 return;
             }
 
             token = entered;
-            saveToken(token);
-            showMenu();
-            loadNews();
+
+            if (saveToken(token)) {
+                showMenu();
+                loadNews();
+            } else {
+                showMessage(
+                    "Не удалось сохранить токен.");
+            }
             return;
         }
 
-        if (s == menu && c == List.SELECT_COMMAND) {
+        if (s == menu && c == openCommand) {
             int selected = menu.getSelectedIndex();
 
             if (selected == 0) {
                 loadNews();
+
             } else if (selected == 1) {
-                request("messages.getConversations?count=15");
+                request(
+                    "messages.getConversations?count=15");
+
             } else if (selected == 2) {
-                request("friends.get?count=50&fields=first_name,last_name");
+                request(
+                    "friends.get?count=50&fields=first_name,last_name");
+
             } else if (selected == 3) {
-                request("users.get?fields=photo_100,city");
+                request(
+                    "users.get?fields=photo_100,city");
+
             } else if (selected == 4) {
-                request("photos.get?album_id=profile&count=20");
+                request(
+                    "photos.get?album_id=profile&count=20");
+
             } else if (selected == 5) {
                 showMusic();
+
             } else if (selected == 6) {
                 showLogin();
+
             } else if (selected == 7) {
                 destroyApp(true);
                 notifyDestroyed();
@@ -158,12 +185,14 @@ public class VK4MENext extends MIDlet
         }
 
         if (c == playStreamCommand) {
-            playAddress(streamField.getString().trim());
+            playAddress(
+                streamField.getString().trim());
             return;
         }
 
         if (c == playLocalCommand) {
-            playAddress(localField.getString().trim());
+            playAddress(
+                localField.getString().trim());
             return;
         }
 
@@ -174,7 +203,8 @@ public class VK4MENext extends MIDlet
     }
 
     private void loadNews() {
-        request("newsfeed.get?filters=post&count=10");
+        request(
+            "newsfeed.get?filters=post&count=10");
     }
 
     private void request(final String method) {
@@ -187,7 +217,8 @@ public class VK4MENext extends MIDlet
 
                 try {
                     String url = API + method
-                        + "&access_token=" + urlEncode(token)
+                        + "&access_token="
+                        + urlEncode(token)
                         + "&v=" + VERSION;
 
                     con = (HttpConnection)
@@ -195,6 +226,10 @@ public class VK4MENext extends MIDlet
 
                     con.setRequestMethod(
                         HttpConnection.GET);
+
+                    con.setRequestProperty(
+                        "User-Agent",
+                        "VK4ME-NEXT/1.0");
 
                     int status = con.getResponseCode();
 
@@ -215,20 +250,31 @@ public class VK4MENext extends MIDlet
                     while ((count = in.read(buffer)) != -1) {
                         out.write(buffer, 0, count);
                         total += count;
-                        if (total >= 20000) break;
+
+                        if (total >= 20000) {
+                            break;
+                        }
                     }
 
                     final String json =
-                        new String(out.toByteArray(), "UTF-8");
+                        new String(
+                            out.toByteArray(),
+                            "UTF-8");
 
                     final String result;
 
                     if (json.indexOf("\"error\"") >= 0) {
-                        result = "Ошибка VK API:\n\n" + json;
-                    } else if (method.startsWith("newsfeed.get")) {
+                        result =
+                            "Ошибка VK API:\n\n" + json;
+
+                    } else if (
+                        method.startsWith("newsfeed.get")) {
+
                         result = formatNews(json);
+
                     } else {
-                        result = "Ответ VK:\n\n" + json;
+                        result =
+                            "Ответ VK:\n\n" + json;
                     }
 
                     display.callSerially(new Runnable() {
@@ -243,7 +289,8 @@ public class VK4MENext extends MIDlet
                     display.callSerially(new Runnable() {
                         public void run() {
                             showResult(
-                                "Ошибка соединения:\n" + error);
+                                "Ошибка соединения:\n\n"
+                                + error);
                         }
                     });
 
@@ -262,22 +309,32 @@ public class VK4MENext extends MIDlet
 
     private String formatNews(String json) {
         StringBuffer result = new StringBuffer();
+
         result.append("НОВОСТИ VK\n\n");
 
         int position = 0;
         int number = 0;
 
-        while (position < json.length() && number < 10) {
-            int key = json.indexOf("\"text\"", position);
+        while (position < json.length()
+                && number < 10) {
+
+            int key = json.indexOf(
+                "\"text\"", position);
+
             if (key < 0) break;
 
-            int colon = json.indexOf(':', key + 6);
+            int colon = json.indexOf(
+                ':', key + 6);
+
             if (colon < 0) break;
 
-            int quote = json.indexOf('"', colon + 1);
+            int quote = json.indexOf(
+                '"', colon + 1);
+
             if (quote < 0) break;
 
             StringBuffer post = new StringBuffer();
+
             int i = quote + 1;
             boolean closed = false;
 
@@ -294,21 +351,32 @@ public class VK4MENext extends MIDlet
 
                     if (next == 'n') {
                         post.append('\n');
-                    } else if (next == 'r' || next == 't') {
+
+                    } else if (
+                        next == 'r' || next == 't') {
                         post.append(' ');
-                    } else if (next == 'u'
-                            && i + 4 <= json.length()) {
+
+                    } else if (
+                        next == 'u'
+                        && i + 4 <= json.length()) {
+
                         try {
-                            int code = Integer.parseInt(
-                                json.substring(i, i + 4), 16);
+                            int code =
+                                Integer.parseInt(
+                                    json.substring(i, i + 4),
+                                    16);
+
                             post.append((char) code);
                             i += 4;
+
                         } catch (Exception e) {
                             post.append('?');
                         }
+
                     } else {
                         post.append(next);
                     }
+
                 } else {
                     post.append(ch);
                 }
@@ -320,16 +388,19 @@ public class VK4MENext extends MIDlet
 
             if (closed && text.length() > 0) {
                 number++;
+
                 result.append("Пост ");
                 result.append(number);
                 result.append("\n");
                 result.append(text);
-                result.append("\n\n----------------\n\n");
+                result.append("\n\n");
+                result.append("----------------\n\n");
             }
         }
 
         if (number == 0) {
-            result.append("Текстовых записей не найдено.\n\n");
+            result.append(
+                "Текстовых записей не найдено.\n\n");
             result.append(json);
         }
 
@@ -339,40 +410,53 @@ public class VK4MENext extends MIDlet
     private void showMusic() {
         musicForm = new Form("VK4ME - Музыка");
 
-        musicForm.append("ИНТЕРНЕТ-ПОТОК\n");
+        musicForm.append(
+            "ВОСПРОИЗВЕДЕНИЕ АУДИО\n\n");
 
         streamField = new TextField(
-            "HTTP/HTTPS URL:",
-            "http://example.com/radio.mp3",
-            500, TextField.URL);
+            "HTTP/HTTPS ссылка:",
+            "",
+            500,
+            TextField.URL);
 
         musicForm.append(streamField);
 
         playStreamCommand = new Command(
-            "Играть поток", Command.OK, 1);
+            "Играть поток",
+            Command.OK,
+            1);
 
-        musicForm.append("\nЛОКАЛЬНЫЙ ФАЙЛ\n");
+        musicForm.append(
+            "\nЛОКАЛЬНЫЙ АУДИОФАЙЛ\n");
 
         localField = new TextField(
             "Путь к файлу:",
-            "file:///E:/Music/song.mp3",
-            500, TextField.URL);
+            "",
+            500,
+            TextField.URL);
 
         musicForm.append(localField);
 
         playLocalCommand = new Command(
-            "Играть файл", Command.OK, 2);
+            "Играть файл",
+            Command.OK,
+            2);
 
         statusItem = new StringItem(
-            "Статус:", "Ожидание");
+            "Статус:",
+            "Ожидание");
 
         musicForm.append(statusItem);
 
         stopCommand = new Command(
-            "Стоп", Command.STOP, 3);
+            "Стоп",
+            Command.STOP,
+            3);
 
         backCommand = new Command(
-            "Назад", Command.BACK, 4);
+            "Назад",
+            Command.BACK,
+            4);
 
         musicForm.addCommand(playStreamCommand);
         musicForm.addCommand(playLocalCommand);
@@ -380,6 +464,7 @@ public class VK4MENext extends MIDlet
         musicForm.addCommand(backCommand);
 
         musicForm.setCommandListener(this);
+
         display.setCurrent(musicForm);
     }
 
@@ -388,24 +473,29 @@ public class VK4MENext extends MIDlet
             stopMusic();
 
             if (address.length() == 0) {
-                statusItem.setText("Нет адреса");
+                statusItem.setText(
+                    "Укажи адрес аудио.");
                 return;
             }
 
             if (!(address.startsWith("http://")
                     || address.startsWith("https://")
                     || address.startsWith("file://"))) {
-                statusItem.setText("Неверный адрес");
+
+                statusItem.setText(
+                    "Неверный адрес.");
                 return;
             }
 
-            statusItem.setText("Подключение...");
+            statusItem.setText(
+                "Подключение...");
 
             player = Manager.createPlayer(address);
             player.realize();
             player.start();
 
-            statusItem.setText("Воспроизведение");
+            statusItem.setText(
+                "Воспроизведение.");
 
         } catch (Exception e) {
             statusItem.setText(
@@ -424,15 +514,19 @@ public class VK4MENext extends MIDlet
         }
 
         if (statusItem != null) {
-            statusItem.setText("Остановлено");
+            statusItem.setText("Остановлено.");
         }
     }
 
     private String urlEncode(String value) {
         try {
             byte[] data = value.getBytes("UTF-8");
-            StringBuffer result = new StringBuffer();
-            String hex = "0123456789ABCDEF";
+
+            StringBuffer result =
+                new StringBuffer();
+
+            String hex =
+                "0123456789ABCDEF";
 
             for (int i = 0; i < data.length; i++) {
                 int b = data[i] & 255;
@@ -442,7 +536,9 @@ public class VK4MENext extends MIDlet
                     || (b >= 48 && b <= 57)
                     || b == 45 || b == 46
                     || b == 95 || b == 126) {
+
                     result.append((char) b);
+
                 } else {
                     result.append('%');
                     result.append(hex.charAt(b >> 4));
@@ -459,27 +555,37 @@ public class VK4MENext extends MIDlet
 
     private void showMessage(String message) {
         TextBox box = new TextBox(
-            "VK4ME NEXT", message, 12000,
+            "VK4ME NEXT",
+            message,
+            12000,
             TextField.ANY);
 
         backCommand = new Command(
-            "Назад", Command.BACK, 1);
+            "Назад",
+            Command.BACK,
+            1);
 
         box.addCommand(backCommand);
         box.setCommandListener(this);
+
         display.setCurrent(box);
     }
 
     private void showResult(String message) {
         TextBox box = new TextBox(
-            "VK4ME NEXT", message, 12000,
+            "VK4ME NEXT",
+            message,
+            12000,
             TextField.ANY);
 
         backCommand = new Command(
-            "Назад", Command.BACK, 1);
+            "Назад",
+            Command.BACK,
+            1);
 
         box.addCommand(backCommand);
         box.setCommandListener(this);
+
         display.setCurrent(box);
     }
 
@@ -488,17 +594,23 @@ public class VK4MENext extends MIDlet
 
         try {
             store = RecordStore.openRecordStore(
-                "VK4ME_TOKEN", true);
+                STORE,
+                true);
 
             if (store.getNumRecords() > 0) {
                 byte[] data = store.getRecord(1);
-                return new String(data, "UTF-8");
+
+                return new String(
+                    data,
+                    "UTF-8");
             }
 
         } catch (Exception e) {
         } finally {
             try {
-                if (store != null) store.closeRecordStore();
+                if (store != null) {
+                    store.closeRecordStore();
+                }
             } catch (Exception ignored) {
             }
         }
@@ -506,27 +618,40 @@ public class VK4MENext extends MIDlet
         return "";
     }
 
-    private void saveToken(String value) {
+    private boolean saveToken(String value) {
         RecordStore store = null;
 
         try {
             store = RecordStore.openRecordStore(
-                "VK4ME_TOKEN", true);
+                STORE,
+                true);
 
             byte[] data = value.getBytes("UTF-8");
 
             if (store.getNumRecords() > 0) {
-                store.setRecord(1, data, 0, data.length);
+                store.setRecord(
+                    1,
+                    data,
+                    0,
+                    data.length);
+
             } else {
-                store.addRecord(data, 0, data.length);
+                store.addRecord(
+                    data,
+                    0,
+                    data.length);
             }
 
+            return true;
+
         } catch (Exception e) {
-            showMessage("Ошибка сохранения токена:\n"
-                + e.toString());
+            return false;
+
         } finally {
             try {
-                if (store != null) store.closeRecordStore();
+                if (store != null) {
+                    store.closeRecordStore();
+                }
             } catch (Exception ignored) {
             }
         }
