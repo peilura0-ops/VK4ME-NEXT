@@ -1,177 +1,295 @@
 import javax.microedition.midlet.*;
 import javax.microedition.lcdui.*;
 import javax.microedition.io.*;
+import javax.microedition.media.*;
 import java.io.*;
 
 public class VK4MENext extends MIDlet
         implements CommandListener {
 
     private Display display;
-    private Form loginForm;
+    private Form menu;
     private TextField tokenField;
-    private Form feedForm;
+    private TextField musicPath;
+    private TextBox result;
 
-    private Command connectCommand;
-    private Command exitCommand;
+    private Command openCommand;
     private Command backCommand;
+    private Command exitCommand;
+    private Command playCommand;
+    private Command stopCommand;
+
+    private Player player;
+    private String token = "";
 
     private static final String API =
-        "https://api.vk.com/method/newsfeed.get";
+        "https://api.vk.com/method/";
 
     public void startApp() {
         display = Display.getDisplay(this);
-        loginForm = new Form("VK4ME NEXT");
+        showLogin();
+    }
 
-        loginForm.append(new StringItem(null,
-            "VK4ME NEXT Classic\n\nВведите токен VK:"));
+    private void showLogin() {
+        Form form = new Form("VK4ME NEXT");
 
+        form.append("VK4ME NEXT Classic\n\n");
         tokenField = new TextField(
-            "VK token:", "", 500, TextField.ANY);
+            "Токен VK:", "", 500, TextField.ANY);
 
-        loginForm.append(tokenField);
+        form.append(tokenField);
 
-        connectCommand = new Command(
-            "Загрузить ленту", Command.OK, 1);
+        openCommand = new Command(
+            "Продолжить", Command.OK, 1);
 
         exitCommand = new Command(
             "Выход", Command.EXIT, 2);
 
-        loginForm.addCommand(connectCommand);
-        loginForm.addCommand(exitCommand);
-        loginForm.setCommandListener(this);
+        form.addCommand(openCommand);
+        form.addCommand(exitCommand);
+        form.setCommandListener(this);
 
-        display.setCurrent(loginForm);
+        display.setCurrent(form);
+    }
+
+    private void showMenu() {
+        menu = new Form("VK4ME NEXT");
+
+        menu.append("Главное меню\n\n");
+        menu.append("Новости\n");
+        menu.append("Сообщения\n");
+        menu.append("Друзья\n");
+        menu.append("Профиль\n");
+        menu.append("Фото\n");
+        menu.append("Музыка\n");
+
+        StringItem news = new StringItem(
+            "Новости", "Открыть ленту");
+        StringItem messages = new StringItem(
+            "Сообщения", "Открыть диалоги");
+        StringItem friends = new StringItem(
+            "Друзья", "Список друзей");
+        StringItem profile = new StringItem(
+            "Профиль", "Мой профиль");
+        StringItem photos = new StringItem(
+            "Фото", "Мои фотографии");
+        StringItem music = new StringItem(
+            "Музыка", "Локальные MP3");
+
+        menu.deleteAll();
+
+        menu.append(news);
+        menu.append(messages);
+        menu.append(friends);
+        menu.append(profile);
+        menu.append(photos);
+        menu.append(music);
+
+        menu.addCommand(new Command(
+            "Новости", Command.ITEM, 1));
+        menu.addCommand(new Command(
+            "Сообщения", Command.ITEM, 2));
+        menu.addCommand(new Command(
+            "Друзья", Command.ITEM, 3));
+        menu.addCommand(new Command(
+            "Профиль", Command.ITEM, 4));
+        menu.addCommand(new Command(
+            "Фото", Command.ITEM, 5));
+        menu.addCommand(new Command(
+            "Музыка", Command.ITEM, 6));
+        menu.addCommand(exitCommand);
+
+        menu.setCommandListener(this);
+        display.setCurrent(menu);
     }
 
     public void commandAction(
-        Command command, Displayable screen) {
+        Command c, Displayable s) {
 
-        if (command == exitCommand) {
+        if (c == exitCommand) {
             destroyApp(true);
             notifyDestroyed();
+            return;
         }
 
-        if (command == connectCommand) {
-            String token = tokenField.getString().trim();
+        if (c == openCommand) {
+            token = tokenField.getString().trim();
 
             if (token.length() == 0) {
-                showMessage("Введите токен VK.");
+                showText("Введите токен VK");
                 return;
             }
 
-            showMessage("Загрузка новостей...");
-            new Thread(new Loader(token)).start();
+            showMenu();
+            return;
         }
 
-        if (command == backCommand) {
-            display.setCurrent(loginForm);
+        if (c == backCommand) {
+            showMenu();
+            return;
         }
-    }
 
-    private void showMessage(String message) {
-        final String text = message;
-
-        display.callSerially(new Runnable() {
-            public void run() {
-                TextBox box = new TextBox(
-                    "VK4ME NEXT", text, 4000,
-                    TextField.ANY);
-
-                backCommand = new Command(
-                    "Назад", Command.BACK, 1);
-
-                box.addCommand(backCommand);
-                box.setCommandListener(VK4MENext.this);
-                display.setCurrent(box);
+        if (s == menu) {
+            if (c.getLabel().equals("Новости")) {
+                request("newsfeed.get?filters=post&count=10");
+            } else if (c.getLabel().equals("Сообщения")) {
+                request("messages.getConversations?count=10");
+            } else if (c.getLabel().equals("Друзья")) {
+                request("friends.get?count=50&fields=first_name,last_name");
+            } else if (c.getLabel().equals("Профиль")) {
+                request("users.get?fields=photo_100,city");
+            } else if (c.getLabel().equals("Фото")) {
+                request("photos.get?album_id=profile&count=20");
+            } else if (c.getLabel().equals("Музыка")) {
+                showMusic();
             }
-        });
-    }
-
-    private class Loader implements Runnable {
-        private String token;
-
-        Loader(String value) {
-            token = value;
         }
 
-        public void run() {
-            HttpConnection connection = null;
-            InputStream input = null;
+        if (c == playCommand) {
+            playMusic();
+        }
 
-            try {
-                String url = API
-                    + "?filters=post"
-                    + "&count=10"
-                    + "&access_token=" + token
-                    + "&v=5.199";
+        if (c == stopCommand) {
+            stopMusic();
+        }
+    }
 
-                connection = (HttpConnection)
-                    Connector.open(url);
+    private void request(final String method) {
+        showText("Загрузка...");
 
-                connection.setRequestMethod(
-                    HttpConnection.GET);
+        new Thread(new Runnable() {
+            public void run() {
+                HttpConnection con = null;
+                InputStream in = null;
 
-                int status = connection.getResponseCode();
-                input = connection.openInputStream();
-
-                ByteArrayOutputStream output =
-                    new ByteArrayOutputStream();
-
-                int data;
-                while ((data = input.read()) != -1) {
-                    output.write(data);
-                    if (output.size() >= 12000) break;
-                }
-
-                String json = new String(
-                    output.toByteArray(), "UTF-8");
-
-                if (status != 200) {
-                    showMessage("HTTP " + status + "\n" + json);
-                } else {
-                    showFeed(json);
-                }
-
-            } catch (Exception e) {
-                showMessage("Ошибка:\n" + e.toString());
-            } finally {
                 try {
-                    if (input != null) input.close();
-                    if (connection != null) connection.close();
-                } catch (Exception ignored) {
+                    String url = API + method
+                        + "&access_token=" + token
+                        + "&v=5.199";
+
+                    con = (HttpConnection)
+                        Connector.open(url);
+
+                    con.setRequestMethod(
+                        HttpConnection.GET);
+
+                    int status = con.getResponseCode();
+                    in = con.openInputStream();
+
+                    ByteArrayOutputStream out =
+                        new ByteArrayOutputStream();
+
+                    int b;
+                    while ((b = in.read()) != -1) {
+                        out.write(b);
+                        if (out.size() > 12000) break;
+                    }
+
+                    final String answer =
+                        "HTTP " + status + "\n\n"
+                        + new String(
+                            out.toByteArray(), "UTF-8");
+
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            showText(answer);
+                        }
+                    });
+
+                } catch (Exception e) {
+                    final String error = e.toString();
+
+                    display.callSerially(new Runnable() {
+                        public void run() {
+                            showText("Ошибка: " + error);
+                        }
+                    });
+                } finally {
+                    try {
+                        if (in != null) in.close();
+                        if (con != null) con.close();
+                    } catch (Exception ignored) {
+                    }
                 }
             }
+        }).start();
+    }
+
+    private void showMusic() {
+        Form form = new Form("Музыкальный плеер");
+
+        form.append("Путь к MP3-файлу:\n");
+
+        musicPath = new TextField(
+            "Файл:", "file:///E:/Music/song.mp3",
+            250, TextField.URL);
+
+        form.append(musicPath);
+
+        playCommand = new Command(
+            "Воспроизвести", Command.OK, 1);
+
+        stopCommand = new Command(
+            "Стоп", Command.STOP, 2);
+
+        backCommand = new Command(
+            "Назад", Command.BACK, 3);
+
+        form.addCommand(playCommand);
+        form.addCommand(stopCommand);
+        form.addCommand(backCommand);
+        form.setCommandListener(this);
+
+        display.setCurrent(form);
+    }
+
+    private void playMusic() {
+        try {
+            stopMusic();
+
+            player = Manager.createPlayer(
+                musicPath.getString().trim());
+
+            player.realize();
+            player.start();
+
+            showText("Воспроизведение запущено");
+
+        } catch (Exception e) {
+            showText("Не удалось открыть MP3:\n"
+                + e.toString());
         }
     }
 
-    private void showFeed(final String json) {
-        display.callSerially(new Runnable() {
-            public void run() {
-                feedForm = new Form("Новости VK");
-
-                feedForm.append(new StringItem(
-                    null,
-                    "Ответ VK получен.\n\n"
-                    + "Пока показываем данные JSON.\n"
-                    + "Следующий этап — разбор публикаций."
-                ));
-
-                feedForm.append(new StringItem(
-                    "Ответ сервера:", json));
-
-                backCommand = new Command(
-                    "Назад", Command.BACK, 1);
-
-                feedForm.addCommand(backCommand);
-                feedForm.setCommandListener(VK4MENext.this);
-                display.setCurrent(feedForm);
+    private void stopMusic() {
+        try {
+            if (player != null) {
+                player.stop();
+                player.close();
+                player = null;
             }
-        });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showText(String text) {
+        result = new TextBox(
+            "VK4ME NEXT", text, 12000,
+            TextField.ANY);
+
+        backCommand = new Command(
+            "Назад", Command.BACK, 1);
+
+        result.addCommand(backCommand);
+        result.setCommandListener(this);
+
+        display.setCurrent(result);
     }
 
     public void pauseApp() {
     }
 
     public void destroyApp(boolean unconditional) {
+        stopMusic();
     }
 }
