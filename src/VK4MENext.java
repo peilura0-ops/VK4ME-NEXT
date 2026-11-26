@@ -9,38 +9,32 @@ public class VK4MENext extends MIDlet
     private Display display;
     private Form loginForm;
     private TextField tokenField;
-    private TextBox resultBox;
+    private Form feedForm;
 
     private Command connectCommand;
-    private Command backCommand;
     private Command exitCommand;
+    private Command backCommand;
 
     private static final String API =
         "https://api.vk.com/method/newsfeed.get";
 
     public void startApp() {
         display = Display.getDisplay(this);
-
         loginForm = new Form("VK4ME NEXT");
 
-        loginForm.append(new StringItem(
-            null,
-            "Подключение к VK\n\nВведите пользовательский токен:"
-        ));
+        loginForm.append(new StringItem(null,
+            "VK4ME NEXT Classic\n\nВведите токен VK:"));
 
         tokenField = new TextField(
-            "VK token:", "", 500, TextField.ANY
-        );
+            "VK token:", "", 500, TextField.ANY);
 
         loginForm.append(tokenField);
 
         connectCommand = new Command(
-            "Загрузить ленту", Command.OK, 1
-        );
+            "Загрузить ленту", Command.OK, 1);
 
         exitCommand = new Command(
-            "Выход", Command.EXIT, 2
-        );
+            "Выход", Command.EXIT, 2);
 
         loginForm.addCommand(connectCommand);
         loginForm.addCommand(exitCommand);
@@ -61,11 +55,11 @@ public class VK4MENext extends MIDlet
             String token = tokenField.getString().trim();
 
             if (token.length() == 0) {
-                showResult("Введите токен VK.");
+                showMessage("Введите токен VK.");
                 return;
             }
 
-            showResult("Подключение к VK...");
+            showMessage("Загрузка новостей...");
             new Thread(new Loader(token)).start();
         }
 
@@ -74,22 +68,23 @@ public class VK4MENext extends MIDlet
         }
     }
 
-    private void showResult(String message) {
-        resultBox = new TextBox(
-            "VK4ME NEXT",
-            message,
-            4000,
-            TextField.ANY
-        );
+    private void showMessage(String message) {
+        final String text = message;
 
-        backCommand = new Command(
-            "Назад", Command.BACK, 1
-        );
+        display.callSerially(new Runnable() {
+            public void run() {
+                TextBox box = new TextBox(
+                    "VK4ME NEXT", text, 4000,
+                    TextField.ANY);
 
-        resultBox.addCommand(backCommand);
-        resultBox.setCommandListener(this);
+                backCommand = new Command(
+                    "Назад", Command.BACK, 1);
 
-        display.setCurrent(resultBox);
+                box.addCommand(backCommand);
+                box.setCommandListener(VK4MENext.this);
+                display.setCurrent(box);
+            }
+        });
     }
 
     private class Loader implements Runnable {
@@ -114,53 +109,64 @@ public class VK4MENext extends MIDlet
                     Connector.open(url);
 
                 connection.setRequestMethod(
-                    HttpConnection.GET
-                );
+                    HttpConnection.GET);
 
-                connection.setRequestProperty(
-                    "User-Agent", "VK4ME-NEXT"
-                );
-
-                int status =
-                    connection.getResponseCode();
-
+                int status = connection.getResponseCode();
                 input = connection.openInputStream();
 
                 ByteArrayOutputStream output =
                     new ByteArrayOutputStream();
 
                 int data;
-
                 while ((data = input.read()) != -1) {
                     output.write(data);
-
-                    if (output.size() >= 3500) {
-                        break;
-                    }
+                    if (output.size() >= 12000) break;
                 }
 
-                String response =
-                    new String(output.toByteArray(), "UTF-8");
+                String json = new String(
+                    output.toByteArray(), "UTF-8");
 
-                showResult(
-                    "HTTP: " + status + "\n\n" + response
-                );
+                if (status != 200) {
+                    showMessage("HTTP " + status + "\n" + json);
+                } else {
+                    showFeed(json);
+                }
 
             } catch (Exception e) {
-                showResult(
-                    "Ошибка подключения:\n" +
-                    e.toString()
-                );
-
+                showMessage("Ошибка:\n" + e.toString());
             } finally {
                 try {
                     if (input != null) input.close();
-                    if (connection != null)
-                        connection.close();
+                    if (connection != null) connection.close();
                 } catch (Exception ignored) {
                 }
             }
         }
+    }
+
+    private void showFeed(final String json) {
+        display.callSerially(new Runnable() {
+            public void run() {
+                feedForm = new Form("Новости VK");
+
+                feedForm.append(new StringItem(
+                    null,
+                    "Ответ VK получен.\n\n"
+                    + "Пока показываем данные JSON.\n"
+                    + "Следующий этап — разбор публикаций."
+                ));
+
+                feedForm.append(new StringItem(
+                    "Ответ сервера:", json));
+
+                backCommand = new Command(
+                    "Назад", Command.BACK, 1);
+
+                feedForm.addCommand(backCommand);
+                feedForm.setCommandListener(VK4MENext.this);
+                display.setCurrent(feedForm);
+            }
+        });
     }
 
     public void pauseApp() {
