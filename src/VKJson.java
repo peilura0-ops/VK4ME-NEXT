@@ -1,21 +1,21 @@
+
+import java.util.Hashtable;
+import java.util.Vector;
+
 public class VKJson {
 
     private String data;
     private int pos;
 
-    public VKJson(String json) {
-        data = json;
-        pos = 0;
-    }
-
-    public Object parse() {
-        skip();
-        return value();
+    public static Object parse(String json) {
+        VKJson parser = new VKJson();
+        parser.data = json;
+        parser.pos = 0;
+        return parser.value();
     }
 
     private Object value() {
         skip();
-
         if (pos >= data.length()) return null;
 
         char c = data.charAt(pos);
@@ -42,75 +42,67 @@ public class VKJson {
         return number();
     }
 
-    private java.util.Hashtable object() {
-        java.util.Hashtable map =
-            new java.util.Hashtable();
-
+    private Hashtable object() {
+        Hashtable result = new Hashtable();
         pos++;
-        skip();
 
-        while (pos < data.length()
-                && data.charAt(pos) != '}') {
+        while (true) {
+            skip();
+
+            if (pos >= data.length()) break;
+            if (data.charAt(pos) == '}') {
+                pos++;
+                break;
+            }
 
             String key = string();
 
             skip();
-            pos++;
-            skip();
+            if (pos < data.length() && data.charAt(pos) == ':') {
+                pos++;
+            }
 
             Object val = value();
-
             if (val != null) {
-                map.put(key, val);
+                result.put(key, val);
             }
 
             skip();
-
-            if (pos < data.length()
-                    && data.charAt(pos) == ',') {
+            if (pos < data.length() && data.charAt(pos) == ',') {
                 pos++;
-                skip();
-            } else {
-                break;
             }
         }
 
-        if (pos < data.length()) pos++;
-
-        return map;
+        return result;
     }
 
-    private java.util.Vector array() {
-        java.util.Vector list =
-            new java.util.Vector();
-
+    private Vector array() {
+        Vector result = new Vector();
         pos++;
-        skip();
 
-        while (pos < data.length()
-                && data.charAt(pos) != ']') {
-
-            list.addElement(value());
+        while (true) {
             skip();
 
-            if (pos < data.length()
-                    && data.charAt(pos) == ',') {
+            if (pos >= data.length()) break;
+            if (data.charAt(pos) == ']') {
                 pos++;
-                skip();
-            } else {
                 break;
+            }
+
+            result.addElement(value());
+
+            skip();
+            if (pos < data.length() && data.charAt(pos) == ',') {
+                pos++;
             }
         }
 
-        if (pos < data.length()) pos++;
-
-        return list;
+        return result;
     }
 
     private String string() {
         StringBuffer result = new StringBuffer();
-
-        if (data.charAt(pos) == '"') pos++;
+        pos++;
 
         while (pos < data.length()) {
             char c = data.charAt(pos++);
@@ -118,23 +110,24 @@ public class VKJson {
             if (c == '"') break;
 
             if (c == '\\' && pos < data.length()) {
-                char n = data.charAt(pos++);
+                char e = data.charAt(pos++);
 
-                if (n == 'n') result.append('\n');
-                else if (n == 'r') result.append('\r');
-                else if (n == 't') result.append('\t');
-                else if (n == 'u' && pos + 4 <= data.length()) {
+                if (e == 'n') result.append('\n');
+                else if (e == 'r') result.append('\r');
+                else if (e == 't') result.append('\t');
+                else if (e == 'b') result.append('\b');
+                else if (e == 'f') result.append('\f');
+                else if (e == 'u' && pos + 4 <= data.length()) {
                     try {
-                        result.append((char)
-                            Integer.parseInt(
-                                data.substring(pos, pos + 4),
-                                16));
+                        int code = Integer.parseInt(
+                            data.substring(pos, pos + 4), 16);
+                        result.append((char) code);
                         pos += 4;
-                    } catch (Exception e) {
+                    } catch (Exception ex) {
                         result.append('?');
                     }
                 } else {
-                    result.append(n);
+                    result.append(e);
                 }
             } else {
                 result.append(c);
@@ -144,30 +137,25 @@ public class VKJson {
         return result.toString();
     }
 
-    private Number number() {
+    private Double number() {
         int start = pos;
 
         while (pos < data.length()) {
             char c = data.charAt(pos);
 
-            if ((c >= '0' && c <= '9')
-                    || c == '-'
-                    || c == '+'
-                    || c == '.'
-                    || c == 'e'
-                    || c == 'E') {
+            if ((c >= '0' && c <= '9') ||
+                c == '-' || c == '+' ||
+                c == '.' || c == 'e' || c == 'E') {
                 pos++;
             } else {
                 break;
             }
         }
 
-        String n = data.substring(start, pos);
-
         try {
-            return new Double(n);
-        } catch (Exception e) {
-            return new Integer(0);
+            return new Double(data.substring(start, pos));
+        } catch (Exception ex) {
+            return new Double(0);
         }
     }
 
@@ -175,12 +163,39 @@ public class VKJson {
         while (pos < data.length()) {
             char c = data.charAt(pos);
 
-            if (c == ' ' || c == '\n'
-                    || c == '\r' || c == '\t') {
+            if (c == ' ' || c == '\n' ||
+                c == '\r' || c == '\t') {
                 pos++;
             } else {
                 break;
             }
         }
+    }
+
+    public static Hashtable asObject(Object value) {
+        if (value instanceof Hashtable) {
+            return (Hashtable) value;
+        }
+        return new Hashtable();
+    }
+
+    public static Vector asArray(Object value) {
+        if (value instanceof Vector) {
+            return (Vector) value;
+        }
+        return new Vector();
+    }
+
+    public static String getString(Hashtable object, String key) {
+        Object value = object.get(key);
+        return value == null ? "" : value.toString();
+    }
+
+    public static Hashtable getObject(Hashtable object, String key) {
+        return asObject(object.get(key));
+    }
+
+    public static Vector getArray(Hashtable object, String key) {
+        return asArray(object.get(key));
     }
 }
